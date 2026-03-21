@@ -1,0 +1,15 @@
+global:
+  scrape_interval: 2s
+  evaluation_interval: 2s
+
+scrape_configs:
+  # Go-сервис: transfer throughput, outbox lag, consumer latency
+  - job_name: 'transfers'
+    static_configs:
+      - targets: ['transfers:8080']
+
+  # RabbitMQ: queue depth, message rates, connection count
+  # Встроенный плагин rabbitmq_prometheus отдаёт метрики на :15692
+  - job_name: 'rabbitmq'
+    static_configs:
+      - targets: ['rabbitmq:15692']

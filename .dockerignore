@@ -1,0 +1,9 @@
+.gitignore
+.envs
+.git
+
+builds
+
+compose.yml
+Makefile
+migrations

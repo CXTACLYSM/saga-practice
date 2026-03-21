@@ -1,0 +1,130 @@
+services:
+  transfers:
+    image: saga-practice:1.0
+    container_name: "transfers"
+    hostname: "transfers"
+    networks:
+      - backend
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://transfers:8080/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  # ===========================================================================
+  # DATA STORES
+  # ===========================================================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: "postgres"
+    hostname: "postgres"
+    networks:
+      - backend
+    ports:
+      - "5432:5432"
+    user: postgres
+    environment:
+      POSTGRES_USER: "lab"
+      POSTGRES_PASSWORD: "lab"
+      POSTGRES_DB: "transfers"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lab -d transfers"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+  # ===========================================================================
+  # MESSAGING
+  # ===========================================================================
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: "rabbitmq"
+    hostname: "rabbitmq"
+    networks:
+      - backend
+    ports:
+      # AMQP — сюда подключается Go-сервис
+      - "5672:5672"
+      # Management UI — http://localhost:15672 (guest/guest)
+      # Мониторинг очередей, exchanges, bindings, message rates
+      - "15672:15672"
+      # Prometheus metrics endpoint — RabbitMQ отдаёт метрики нативно
+      # через встроенный плагин rabbitmq_prometheus (включён в management image)
+      - "15692:15692"
+    environment:
+      RABBITMQ_DEFAULT_USER: "lab"
+      RABBITMQ_DEFAULT_PASS: "lab"
+      # Включаем Prometheus-плагин: RabbitMQ будет отдавать метрики
+      # (queue depth, message rates, connection count) на :15692/metrics
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+      - ./builds/local/rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
+    healthcheck:
+      # rabbitmq-diagnostics -q ping — проверяет что Erlang VM запущена
+      # И AMQP listener готов принимать соединения.
+      # Без healthcheck Go-сервис стартанёт раньше RabbitMQ и упадёт.
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    restart: unless-stopped
+
+  # ===========================================================================
+  # MONITORING
+  # ===========================================================================
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: "prometheus"
+    hostname: "prometheus"
+    ports:
+      - "9090:9090"
+    networks:
+      - backend
+    volumes:
+      - ./builds/local/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=1d"
+    depends_on:
+      - transfers
+      - rabbitmq
+
+  grafana:
+    image: grafana/grafana:10.4.2
+    container_name: "grafana"
+    hostname: "grafana"
+    ports:
+      - "3000:3000"
+    networks:
+      - backend
+    environment:
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: "Admin"
+    volumes:
+      - ./builds/local/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./builds/local/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+    depends_on:
+      - prometheus
+
+volumes:
+  postgres_data:
+  rabbitmq_data:
+
+networks:
+  backend:
