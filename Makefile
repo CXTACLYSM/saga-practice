@@ -22,9 +22,9 @@ test:
 
 .PHONY: transfer
 transfer:
-	 curl -X POST http://localhost:8080/api/v1/transfers \
+	curl -s -X POST http://localhost:8080/api/v1/transfers \
 		-H "Content-Type: application/json" \
-		-d '{"transfer_id": "550e8400-e29b-41d4-a716-446655440000", "account_from_id": "acc_alice", "account_to_id": "acc_bob", "amount": "500.00"}' | jq
+		-d '{"transfer_id": "$(or $(ID),$(shell uuidgen))", "account_from_id": "acc_alice", "account_to_id": "acc_bob", "amount": "500.00"}' | jq
 
 .PHONY: rabbit-migrate
 rabbit-migrate:

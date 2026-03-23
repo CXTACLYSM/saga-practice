@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/CXTACLYSM/saga-practice/internal/shared/infrastructure/postgres"
@@ -106,6 +107,8 @@ func (h *CreateTransferCommandHandler) Handle(ctx context.Context, command comma
 	if err = tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("error commiting create transfer transaction: %w", err)
 	}
+
+	log.Printf("[saga transaction start: transfer_%s]", transfer.Id)
 
 	return &transfer, nil
 }

@@ -46,7 +46,7 @@ func (w *Worker) process(ctx context.Context) {
 			func() {
 				defer func() {
 					if r := recover(); r != nil {
-						log.Printf("recovered panic in worker")
+						log.Printf("[outbox error]: recovered panic in worker")
 					}
 				}()
 				if err := w.execute(ctx); err != nil {

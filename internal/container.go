@@ -11,6 +11,7 @@ import (
 	transferHTTPHandlers "github.com/CXTACLYSM/saga-practice/internal/transfer/infrastructure/http/handlers"
 	transferCommandHandlers "github.com/CXTACLYSM/saga-practice/internal/transfer/infrastructure/postgres/commands"
 	transferQueryHandlers "github.com/CXTACLYSM/saga-practice/internal/transfer/infrastructure/postgres/queries"
+	consumers "github.com/CXTACLYSM/saga-practice/internal/transfer/infrastructure/rabbitmq"
 	"github.com/CXTACLYSM/saga-practice/pkg/postgres"
 	pkgRabbimq "github.com/CXTACLYSM/saga-practice/pkg/rabbitmq"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -20,6 +21,11 @@ import (
 type Infrastructure struct {
 	Pool     *pgxpool.Pool
 	AmqpConn *amqp.Connection
+}
+
+type Consumers struct {
+	DebitConsumer  *consumers.DebitConsumer
+	CreditConsumer *consumers.CreditConsumer
 }
 
 type Handlers struct {
@@ -51,27 +57,31 @@ type Container struct {
 	Services       *Services
 	Handlers       *Handlers
 	Workers        *Workers
+	Consumers      *Consumers
 }
 
 func NewContainer(cfg *configs.Config) (*Container, error) {
 	container := Container{}
 	if err := container.initInfrastructure(cfg); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("init infrastructure: %w", err)
 	}
 	if err := container.initCommands(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("init commands: %w", err)
 	}
 	if err := container.initQueries(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("init queries: %w", err)
 	}
 	if err := container.initServices(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("init services: %w", err)
 	}
 	if err := container.initHandlers(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("init handlers: %w", err)
 	}
 	if err := container.initWorkers(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("init workers: %w", err)
+	}
+	if err := container.initConsumers(); err != nil {
+		return nil, fmt.Errorf("init consumers: %w", err)
 	}
 
 	return &container, nil
@@ -146,6 +156,24 @@ func (c *Container) initHandlers() error {
 func (c *Container) initWorkers() error {
 	c.Workers = &Workers{
 		OutboxWorker: rabbitmq.NewWorker(c.Infrastructure.Pool, c.Services.Publsher),
+	}
+
+	return nil
+}
+
+func (c *Container) initConsumers() error {
+	debitConsumer, err := consumers.NewDebitConsumer(c.Infrastructure.Pool, c.Infrastructure.AmqpConn)
+	if err != nil {
+		return fmt.Errorf("new debit_consumer: %w", err)
+	}
+	creditConsumer, err := consumers.NewCreditConsumer(c.Infrastructure.Pool, c.Infrastructure.AmqpConn)
+	if err != nil {
+		return fmt.Errorf("new credit_consumer: %w", err)
+	}
+
+	c.Consumers = &Consumers{
+		DebitConsumer:  debitConsumer,
+		CreditConsumer: creditConsumer,
 	}
 
 	return nil

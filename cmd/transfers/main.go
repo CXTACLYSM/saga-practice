@@ -33,7 +33,7 @@ func main() {
 		ReadHeaderTimeout: cfg.App.Http.ReadHeaderTimeout,
 		WriteTimeout:      cfg.App.Http.WriteTimeout,
 		IdleTimeout:       cfg.App.Http.IdleTimeout,
-		MaxHeaderBytes:    1 << 20,
+		MaxHeaderBytes:    cfg.App.Http.MaxHeaderBytes,
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -42,7 +42,11 @@ func main() {
 			log.Fatalf("error staring http server: %v", err)
 		}
 	}()
+
 	container.Workers.OutboxWorker.Start(ctx)
+
+	container.Consumers.DebitConsumer.Start(ctx)
+	container.Consumers.CreditConsumer.Start(ctx)
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
